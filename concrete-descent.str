@@ -222,10 +222,23 @@ const bassF = stack(
 
 // ─── TEXTURAL / ATMOSPHERIC LAYERS ───────────────────────────────────────────
 
-// NOISE SWEEP — filtered white noise for build tension, rises slowly
-const noiseSweep = s("breath")
-  .lpf(sine.range(200, 4000).slow(8))
-  .gain(0.3)
+// NOISE SWEEP — synthesized white noise with smooth filter envelope.
+// lpf set to target ceiling; lpattack does the continuous ramp from
+// near-zero — audio-rate interpolation, no stepping.
+// Two variants: build1 (gentler top) and build2 (rips open fully).
+const noiseSweepB1 = s("white")
+  .lpf(5000)
+  .lpattack(13.7)   // 8 bars at 140bpm ≈ 13.7s — full build duration
+  .lprelease(0.5)
+  .gain(saw.range(0, 0.35).slow(8))
+  .room(0.8)
+  .roomsize(8)
+
+const noiseSweepB2 = s("white")
+  .lpf(12000)
+  .lpattack(13.7)
+  .lprelease(0.5)
+  .gain(saw.range(0, 0.45).slow(8))
   .room(0.8)
   .roomsize(8)
 
@@ -378,16 +391,12 @@ $: stack(
     .mask("<0!16 1!16 0!48>"),
 
   // ── NOISE SWEEP ───────────────────────────────────────────────────────────
-  // Active in both builds — filter opens to trigger the drop
-  noiseSweep
-    .mask(M_BUILD1)
-    .lpf(saw.range(150, 5000).slow(8))
-    .gain(saw.range(0, 0.35).slow(8)),
+  // lpattack handles the smooth continuous filter ramp — no stepping
+  noiseSweepB1
+    .mask(M_BUILD1),
 
-  noiseSweep
-    .mask(M_BUILD2)
-    .lpf(saw.range(150, 8000).slow(8))
-    .gain(saw.range(0, 0.45).slow(8)),
+  noiseSweepB2
+    .mask(M_BUILD2),
 
   // ── STABS ─────────────────────────────────────────────────────────────────
   // Build2 first half: sparse stab
