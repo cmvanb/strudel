@@ -1,0 +1,12 @@
+setcpm(130/4)
+
+setScale("a:phrygian")
+
+$: n("-14!8").sc().set(roller2()).trancegate("<.3 _ _ 1>",45,1).acidenv(slider(0)).o(2)
+
+//$: s("pipeorgan_quiet").ifit(1).n(3).o(3)
+
+$: s("bd:2!4").bank("mc303").duck("2").duckdepth(.8).duckattack(.16)
+
+$: n("<0 0 1 0 0 1 0 0 1 4 7 5 0 5 1 0 0 1 0 0 1 4 5 2 0 5>*16".sub(14))
+  .sc().s("saw").acidenv(slider(0.198)).diode(1).o(3).glide("[0.01, 0.04]")
