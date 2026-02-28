@@ -1,0 +1,407 @@
+// ============================================================
+//  CONCRETE DESCENT  //  140 BPM  //  Eb minor
+//  Structure: intro → build1 → drop1 → break → build2 → drop2 → outro
+//
+//  CYCLE MAP  (1 cycle = 1 bar at 140bpm)
+//  0  - 7   : INTRO        — kick only, bass ghost, filtered noise
+//  8  - 15  : BUILD 1      — kick+hat layer in, bass opens, sub rumble
+//  16 - 31  : DROP 1       — full kit, bass, clap, rim texture
+//  32 - 39  : BREAK        — stripped: bass pulse only, hat breath, tension
+//  40 - 47  : BUILD 2      — stabs, filtered sweep, kick returns
+//  48 - 71  : DROP 2       — everything + extra drive + pitch-shift bass
+//  72 - 79  : OUTRO        — elements drop out one by one, bass decays
+// ============================================================
+
+setcpm(140/4)
+
+// ─── ARRANGEMENT MASKS ───────────────────────────────────────────────────────
+// Each mask is a 80-cycle pattern: 1 = active, 0 = silent.
+// Format: "<0!silent_bars 1!active_bars 0!remaining>"
+// We use .mask("<0!N 1!M 0!R>") style patterns stretched via slow()
+// Each "1" = active, "0" = silent. Pattern repeats every (N+M+R) cycles.
+// TOTAL = 80 cycles. Layout:
+//   intro=8, build1=8, drop1=16, break=8, build2=8, drop2=24, outro=8
+
+// mask strings for each section (80-cycle total period)
+const M_INTRO   = "<1!8  0!72>"
+const M_BUILD1  = "<0!8  1!8  0!64>"
+const M_DROP1   = "<0!16 1!16 0!48>"
+const M_BREAK   = "<0!32 1!8  0!40>"
+const M_BUILD2  = "<0!40 1!8  0!32>"
+const M_DROP2   = "<0!48 1!24 0!8>"
+const M_OUTRO   = "<0!72 1!8>"
+
+// ─── SOUND DESIGN BUILDING BLOCKS ────────────────────────────────────────────
+
+// KICK — four on the floor, 909, heavy
+const kick = s("bd*4")
+  .bank("RolandTR909")
+  .gain(1.2)
+
+// KICK variant for drop2 — adds a ghost 16th for extra drive
+const kickHeavy = s("bd*4, ~ ~ ~ [~ bd]")
+  .bank("RolandTR909")
+  .gain(1.2)
+
+// SNARE / CLAP — 2 and 4
+const snare = s("~ sd ~ sd")
+  .bank("RolandTR909")
+  .gain(0.88)
+  .room(0.18)
+
+// SNARE variant — adds a ghost snare roll at end of every 4th bar
+const snareHeavy = s("~ sd ~ [sd ~ ~ sd*2]")
+  .bank("RolandTR909")
+  .gain(0.88)
+  .room(0.25)
+
+// CLOSED HI-HAT — 8ths, velocity humanised
+const hh = s("hh*8")
+  .bank("RolandTR909")
+  .gain(saw.range(0.45, 0.75).slow(8))
+  .hpf(7500)
+  .pan(sine.range(0.35, 0.65).slow(6))
+
+// HH variant: 16ths for build tension
+const hhBuild = s("hh*16")
+  .bank("RolandTR909")
+  .gain(saw.range(0.3, 0.65).slow(4))
+  .hpf(8500)
+
+// OPEN HAT — sparse
+const oh = s("~ ~ ~ oh ~ ~ ~ ~")
+  .bank("RolandTR909")
+  .gain(0.58)
+  .room(0.3)
+
+// RIM TEXTURE — industrial offbeat hits
+const rim = s("~ rim ~ ~ ~ rim ~ ~")
+  .bank("RolandTR909")
+  .gain(0.5)
+  .hpf(5000)
+  .room(0.15)
+
+// RIM variant for drop2 — syncopated, more aggressive
+const rimHeavy = s("[~ rim ~ ~]*2, ~ ~ ~ ~ rim ~ ~ [rim ~]")
+  .bank("RolandTR909")
+  .gain(0.55)
+  .hpf(4500)
+
+// ─── BASSLINES — five distinct characters, one per section ───────────────────
+
+// ── BASS A: GHOST SUB (intro) ──────────────────────────────────────────────
+// Pure sine, sub-80hz, tied to kick rhythm. Felt more than heard.
+const bassA = note("<eb1 ~ eb1 ~ eb1 ~ [eb1 ~] ~>")
+  .s("sine")
+  .lpf(75)
+  .attack(0.04)
+  .decay(0.5)
+  .sustain(0.3)
+  .release(0.6)
+  .gain(0.7)
+
+// ── BASS B: SUPERSAW GRINDER (build1 + outro) ─────────────────────────────
+// Your original warmer sound. Relentless root motion, perlin filter breathing.
+const bassB = note("<eb2 eb2 eb2 [eb2 bb1] eb2 eb2 [eb2 ~] [gb2 ab2]>")
+  .s("supersaw")
+  .lpf(perlin.range(100, 320).slow(8))
+  .lpq(8)
+  .lpenv(10)
+  .lpa(0.01)
+  .lpd(0.2)
+  .lps(0.4)
+  .attack(0.005)
+  .release(0.1)
+  .gain(1.05)
+  .shape(0.35)
+
+// ── BASS C: ACID WALKER (drop1) ───────────────────────────────────────────
+// Scale-indexed pattern walking Eb2 phrygian. Indices 0,0,7,0,5,0,3,2 —
+// that's root/root/oct/root/5th/root/min3rd/maj2nd. Classic TB-303 energy.
+// Fast filter envelope gives it the acid snap.
+const bassC = n("<[0 0 7 0] [5 0 3 2] [0 0 [7 5] 0] [3 2 0 ~]>*4")
+  .scale("Eb2:phrygian")
+  .s("sawtooth")
+  .lpf(perlin.range(180, 900).slow(6))
+  .lpq(18)
+  .lpenv(6)
+  .lpa(0.005)
+  .lpd(0.15)
+  .lps(0.1)
+  .attack(0.003)
+  .release(0.08)
+  .gain(1.0)
+  .shape(0.4)
+  .distort(0.2)
+
+// ── BASS D: DESCENDING FREEZE (break) ────────────────────────────────────
+// Slow Eb minor descent: Eb→Db→Bb→Ab. One note every two beats.
+// Pure sine + sub layer. Lonely, collapsing, held breath.
+const bassD = stack(
+  // melodic sine
+  note("<eb2@2 db2@2 bb1@2 ab1@2>")
+    .s("sine")
+    .attack(0.15)
+    .decay(1.2)
+    .sustain(0.5)
+    .release(1.0)
+    .gain(0.9)
+    .lpf(300)
+    .room(0.5),
+  // sub reinforcement
+  note("<eb1@2 db1@2 bb0@2 ab0@2>")
+    .s("sine")
+    .attack(0.05)
+    .decay(0.8)
+    .sustain(0.4)
+    .release(0.5)
+    .gain(0.6)
+    .lpf(70)
+)
+
+// ── BASS E: CHROMATIC STALKER (build2) ────────────────────────────────────
+// Phrygian half-step motion: Eb→D→Db, with rhythmic syncopation.
+// Tension through semitone proximity — the half-step below Eb is D,
+// below that Db. Instability that demands the drop.
+const bassE = note("<[eb2 ~ eb2 d2] [~ db2 ~ eb2] [eb2 ~ d2 ~] [db2 eb2 ~ ~]>")
+  .s("supersaw")
+  .lpf(saw.range(120, 600).slow(8))
+  .lpq(6)
+  .lpenv(4)
+  .lpa(0.005)
+  .lpd(0.25)
+  .lps(0.3)
+  .attack(0.005)
+  .release(0.1)
+  .gain(0.95)
+  .shape(0.3)
+
+// ── BASS F: MONSTER STACK (drop2) ─────────────────────────────────────────
+// Three-layer beast:
+//   1. supersaw root — your warmer original pumping hard
+//   2. 16th-note arpeggio through Eb minor scale — motion and melody
+//   3. pure sub sine — seismic sub foundation
+const bassF = stack(
+  // layer 1: supersaw root grind
+  note("<eb2 eb2 eb2 [eb2 bb1] eb2 eb2 [eb2 ~] [gb2 ab2]>")
+    .s("supersaw")
+    .lpf(perlin.range(200, 500).slow(4))
+    .lpq(7)
+    .lpenv(8)
+    .lpa(0.005)
+    .lpd(0.15)
+    .lps(0.5)
+    .attack(0.003)
+    .release(0.08)
+    .gain(1.0)
+    .shape(0.35),
+  // layer 2: ascending/descending 16th arpeggio in Eb minor
+  // pattern: 0 2 3 5 7 5 3 2 (root up to b7th and back) — hypnotic motion
+  n("0 2 3 5 7 5 3 2")
+    .scale("Eb2:minor")
+    .s("sawtooth")
+    .lpf(perlin.range(400, 1400).slow(3))
+    .lpq(12)
+    .lpenv(5)
+    .lpa(0.003)
+    .lpd(0.1)
+    .lps(0.1)
+    .attack(0.002)
+    .release(0.06)
+    .gain(0.65)
+    .shape(0.45)
+    .distort(0.15),
+  // layer 3: sub sine
+  note("eb1*1")
+    .s("sine")
+    .lpf(65)
+    .attack(0.02)
+    .release(0.3)
+    .gain(0.7)
+)
+
+// ─── TEXTURAL / ATMOSPHERIC LAYERS ───────────────────────────────────────────
+
+// NOISE SWEEP — filtered white noise for build tension, rises slowly
+const noiseSweep = s("breath")
+  .lpf(sine.range(200, 4000).slow(8))
+  .gain(0.3)
+  .room(0.8)
+  .roomsize(8)
+
+// SUB DRONE — a barely-audible sub bass rumble that fills the low end in drops
+const subDrone = note("eb1*1")
+  .s("sine")
+  .gain(0.45)
+  .lpf(60)
+  .release(0.5)
+
+// STAB — a short, hard chord stab for build2 tension
+// Eb minor chord: Eb, Gb, Bb
+const stab = note("~ ~ ~ [eb4,gb4,bb4]")
+  .s("sawtooth")
+  .lpf(1200)
+  .lpq(3)
+  .attack(0.005)
+  .decay(0.08)
+  .sustain(0)
+  .gain(0.5)
+  .room(0.3)
+  .shape(0.3)
+
+// STAB variant — faster, more insistent in build2 second half
+const stabFast = note("~ [eb4,gb4,bb4] ~ [eb4,gb4,bb4]")
+  .s("sawtooth")
+  .lpf(perlin.range(800, 2000).slow(4))
+  .lpq(4)
+  .attack(0.003)
+  .decay(0.06)
+  .sustain(0)
+  .gain(0.52)
+  .room(0.2)
+  .shape(0.35)
+
+// ─── ARRANGE: stack all patterns, each masked to its active section(s) ────────
+
+$: stack(
+
+  // ── KICK ──────────────────────────────────────────────────────────────────
+  // Intro: just the kick alone — sparse to start, gains weight by bar 4
+  kick
+    .mask(M_INTRO)
+    .gain(saw.range(0.6, 1.2).slow(8)),   // fade in over 8 bars
+
+  // Build1, Drop1, Build2 sections
+  kick
+    .mask("<0!8 1!48 0!24>"),
+
+  // Drop2: heavier kick variant
+  kickHeavy
+    .mask(M_DROP2),
+
+  // Outro: kick fades out over 8 bars
+  kick
+    .mask(M_OUTRO)
+    .gain(saw.range(1.2, 0).slow(8)),
+
+  // ── SNARE ─────────────────────────────────────────────────────────────────
+  // Not in intro or break. Build1 entry halfway through (bar 12 = cycle 12).
+  snare
+    .mask("<0!12 1!20 0!8 1!8 0!8 1!24>"),
+
+  // Drop2 gets the heavier variant instead
+  snareHeavy
+    .mask(M_DROP2),
+
+  // Outro: snare fades
+  snare
+    .mask(M_OUTRO)
+    .gain(saw.range(0.88, 0).slow(8)),
+
+  // ── HI-HATS ───────────────────────────────────────────────────────────────
+  // Intro: no hats
+  // Build1: hats fade in last 4 bars (cycle 12-15)
+  hh
+    .mask("<0!12 1!4 0!64>")
+    .gain(saw.range(0, 0.65).slow(4)),
+
+  // Drop1 + Build2 (8-16 normal hats) + Drop2
+  hh
+    .mask("<0!16 1!32 0!8 1!24>"),
+
+  // Build1 final 4 bars + Build2: 16th hats layer in for tension
+  hhBuild
+    .mask("<0!12 1!4 0!24 1!8 0!32>")
+    .gain(saw.range(0, 0.55).slow(4)),
+
+  // Drop2: 16th hats too for maximum density
+  hhBuild
+    .mask(M_DROP2)
+    .gain(0.45),
+
+  // Outro: hats fade out
+  hh
+    .mask(M_OUTRO)
+    .gain(saw.range(0.65, 0).slow(8)),
+
+  // ── OPEN HI-HAT ───────────────────────────────────────────────────────────
+  oh
+    .mask("<0!16 1!16 0!8 0!8 1!8 1!24>"),
+
+  oh
+    .mask(M_OUTRO)
+    .gain(saw.range(0.58, 0).slow(8)),
+
+  // ── RIM TEXTURE ───────────────────────────────────────────────────────────
+  rim
+    .mask("<0!16 1!16 0!16 1!8 0!24>"),
+
+  rimHeavy
+    .mask(M_DROP2),
+
+  // ── BASS ──────────────────────────────────────────────────────────────────
+
+  // A: ghost sub sine — intro, fades in over 8 bars
+  bassA
+    .mask(M_INTRO)
+    .gain(saw.range(0, 0.7).slow(8)),
+
+  // B: supersaw grinder — build1, filter sweeps open
+  bassB
+    .mask(M_BUILD1)
+    .lpf(saw.range(80, 320).slow(8)),
+
+  // C: acid walker — drop1, full voice, filter breathes via perlin
+  bassC
+    .mask(M_DROP1),
+
+  // D: descending freeze — break, slow falling line, pure cold sine
+  bassD
+    .mask(M_BREAK),
+
+  // E: chromatic stalker — build2, half-step tension, filter opens
+  bassE
+    .mask(M_BUILD2),
+
+  // F: monster stack — drop2, three layers, seismic
+  bassF
+    .mask(M_DROP2),
+
+  // B: supersaw grinder returns for outro, fades to silence
+  bassB
+    .mask(M_OUTRO)
+    .gain(saw.range(1.05, 0).slow(8)),
+
+  // ── SUB DRONE ─────────────────────────────────────────────────────────────
+  // Drops only — sub already in bassF so lighter here
+  subDrone
+    .mask("<0!16 1!16 0!48>"),
+
+  // ── NOISE SWEEP ───────────────────────────────────────────────────────────
+  // Active in both builds — filter opens to trigger the drop
+  noiseSweep
+    .mask(M_BUILD1)
+    .lpf(saw.range(150, 5000).slow(8))
+    .gain(saw.range(0, 0.35).slow(8)),
+
+  noiseSweep
+    .mask(M_BUILD2)
+    .lpf(saw.range(150, 8000).slow(8))
+    .gain(saw.range(0, 0.45).slow(8)),
+
+  // ── STABS ─────────────────────────────────────────────────────────────────
+  // Build2 first half: sparse stab
+  stab
+    .mask("<0!40 1!4 0!36>"),
+
+  // Build2 second half: faster stab, more urgent
+  stabFast
+    .mask("<0!44 1!4 0!32>"),
+
+  // Occasional stab echo bleeds into first bars of Drop2
+  stab
+    .mask("<0!48 1!2 0!30>")
+    .gain(0.3)
+    .room(0.6)
+
+)
